@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Comprehensive Work Order System (MongoDB Connected)</title>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+    
+    <style>
+        :root {
+            --primary-color: #2563eb; --primary-hover: #1d4ed8;
+            --bg-color: #f8fafc; --card-bg: #ffffff;
+            --text-color: #1e293b; --border-color: #e2e8f0; --readonly-bg: #f1f5f9;
+        }
+
+        /* Basic Reset */
+        *, *::before, *::after { box-sizing: border-box; }
+        
+        body { font-family: 'Segoe UI', Tahoma, Geneva, sans-serif; background-color: var(--bg-color); color: var(--text-color); margin: 0; padding: 20px; }
+        .container { max-width: 1500px; margin: 0 auto; }
+        
+        .tab-nav { display: flex; gap: 10px; margin-bottom: 20px; }
+        .tab-btn { background-color: #e2e8f0; color: #475569; border: none; padding: 12px 24px; border-radius: 8px 8px 0 0; font-size: 1.1rem; font-weight: 600; cursor: pointer; transition: all 0.2s; flex: 1; text-align: center; }
+        .tab-btn.active { background-color: var(--primary-color); color: white; }
+        
+        .card { background-color: var(--card-bg); border-radius: 0 8px 8px 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); padding: 24px; margin-bottom: 24px; display: none; }
+        .card.active { display: block; }
+        .table-card { display: block; border-radius: 8px; }
+        
+        h2 { margin-top: 0; border-bottom: 2px solid var(--border-color); padding-bottom: 10px; }
+        .form-section-title { font-size: 1.1rem; color: var(--primary-color); margin: 20px 0 10px 0; font-weight: 600; }
+        
+        .form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 16px; }
+        .form-group { display: flex; flex-direction: column; }
+        .full-width { grid-column: 1 / -1; }
+        
+        label { font-size: 0.875rem; font-weight: 600; margin-bottom: 4px; color: #475569; }
+        input[type="text"], input[type="number"], input[type="date"], select { padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 1rem; width: 100%; }
+        input[readonly] { background-color: var(--readonly-bg); color: #64748b; cursor: not-allowed; }
+        
+        .btn-container { margin-top: 20px; display: flex; gap: 10px; }
+        button.action-btn { background-color: var(--primary-color); color: white; border: none; padding: 12px 20px; border-radius: 4px; font-size: 1rem; font-weight: 600; cursor: pointer; }
+        button.action-btn:hover { background-color: var(--primary-hover); }
+        .btn-export { background-color: #10b981 !important; }
+        
+        .table-container { overflow-x: auto; max-height: 500px; -webkit-overflow-scrolling: touch; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.85rem; }
+        th, td { padding: 10px; text-align: left; border-bottom: 1px solid var(--border-color); white-space: nowrap; }
+        th { background-color: #f1f5f9; font-weight: 600; position: sticky; top: 0; z-index: 10; }
+        tr:hover { background-color: #f8fafc; }
+        
+        .header-actions { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px; }
+        .badge { background: #dbeafe; color: #1e40af; padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: bold; }
+        
+        .filter-bar { display: flex; gap: 15px; align-items: flex-end; background: #f1f5f9; padding: 15px; border-radius: 6px; margin-bottom: 15px; flex-wrap: wrap; }
+        .filter-item { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 150px; }
+        .btn-clear { background-color: #64748b !important; padding: 10px 15px !important; height: 100%; }
+
+        /* ========================================= */
+        /* MEDIA QUERIES FOR MOBILE & TABLET         */
+        /* ========================================= */
+
+        /* Tablet Adjustments (max 768px) */
+        @media (max-width: 768px) {
+            body { padding: 10px; }
+            .card { padding: 15px; }
+            .tab-nav { flex-direction: row; }
+            .tab-btn { font-size: 0.95rem; padding: 10px; }
+            .filter-bar { flex-direction: column; align-items: stretch; }
+            .btn-clear { width: 100%; margin-top: 5px; }
+        }
+
+        /* Mobile Phone Adjustments (max 480px) */
+        @media (max-width: 480px) {
+            .tab-nav { flex-direction: column; gap: 5px; margin-bottom: 10px; }
+            .tab-btn { border-radius: 6px; } /* Stacked buttons get full rounded corners */
+            .card { border-radius: 8px; }
+            
+            .header-actions { flex-direction: column; align-items: stretch; text-align: center; }
+            .header-actions h2 { border-bottom: none; padding-bottom: 0; }
+            .btn-export { width: 100%; }
+
+            .form-grid { grid-template-columns: 1fr; gap: 12px; } /* 1 Column Form */
+            .btn-container { flex-direction: column; }
+            button.action-btn { width: 100%; padding: 14px; } /* Larger tap targets */
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="tab-nav">
+        <button class="tab-btn active" onclick="switchTab('updateTab', this)">Daily Production Update</button>
+        <button class="tab-btn" onclick="switchTab('createTab', this)">+ Create New Work Order</button>
+    </div>
+
+    <div id="updateTab" class="card active">
+        <h2>Daily Production Update</h2>
+        <form id="updateForm">
+            <div class="form-section-title">1. Select Order & Confirm Details</div>
+            <div class="form-grid">
+                <div class="form-group">
+                    <label for="upd_woSelect">WO NO *</label>
+                    <select id="upd_woSelect" required><option value="">-- Select Work Order --</option></select>
+                </div>
+                <div class="form-group"><label>PART NO</label><input type="text" id="upd_partNo" readonly></div>
+                <div class="form-group"><label>TYPE</label><input type="text" id="upd_type" readonly></div>
+                <div class="form-group"><label>SIZE</label><input type="text" id="upd_size" readonly></div>
+                <div class="form-group"><label>PLAN QTY</label><input type="text" id="upd_planQty" readonly></div>
+            </div>
+
+            <div class="form-section-title">2. Enter Update Information</div>
+            <p style="font-size: 0.85rem; color: #64748b; margin-top:0;">(Changing date auto-loads previous data)</p>
+            <div class="form-grid">
+                <div class="form-group"><label>DATE *</label><input type="date" id="upd_date" required></div>
+                <div class="form-group"><label>4M Status</label><input type="text" id="upd_fourM"></div>
+            </div>
+
+            <div class="form-section-title">3. Enter Daily Progress</div>
+            <div class="form-grid">
+                <div class="form-group"><label>FORGING</label><input type="number" id="upd_forging" min="0"></div>
+                <div class="form-group"><label>ROLLING</label><input type="number" id="upd_rolling" min="0"></div>
+                <div class="form-group"><label>SECONDARY</label><input type="number" id="upd_secondary" min="0"></div>
+                <div class="form-group"><label>HT</label><input type="number" id="upd_ht" min="0"></div>
+                <div class="form-group"><label>POLISHING</label><input type="number" id="upd_polishing" min="0"></div>
+                <div class="form-group"><label>PLATING</label><input type="number" id="upd_plating" min="0"></div>
+                <div class="form-group"><label>FINAL INSPECTION</label><input type="number" id="upd_finalInsp" min="0"></div>
+                <div class="form-group"><label>FG</label><input type="number" id="upd_fg" min="0"></div>
+            </div>
+            <div class="btn-container"><button type="submit" class="action-btn">Save Daily Log</button></div>
+        </form>
+    </div>
+
+    <div id="createTab" class="card">
+        <h2>Create Master Record</h2>
+        <form id="createForm">
+            <div class="form-grid">
+                <div class="form-group"><label>WO NO *</label><input type="text" id="crt_woNo" required></div>
+                <div class="form-group"><label>PART NO</label><input type="text" id="crt_partNo"></div>
+                <div class="form-group"><label>TYPE</label><input type="text" id="crt_type"></div>
+                <div class="form-group"><label>SIZE</label><input type="text" id="crt_size"></div>
+                <div class="form-group"><label>PITCH</label><input type="text" id="crt_pitch"></div>
+                <div class="form-group"><label>LENGTH</label><input type="text" id="crt_length"></div>
+                <div class="form-group"><label>GR</label><input type="text" id="crt_gr"></div>
+                <div class="form-group"><label>A/F</label><input type="text" id="crt_af"></div>
+                <div class="form-group"><label>PLAN QTY</label><input type="text" id="crt_planQty"></div>
+                <div class="form-group"><label>ACTUAL QTY</label><input type="text" id="crt_actualQty"></div>
+                <div class="form-group"><label>R.M DETAILS</label><input type="text" id="crt_rmDetails"></div>
+                <div class="form-group"><label>CH WT</label><input type="number" step="0.01" id="crt_chWt"></div>
+                <div class="form-group"><label>RM KG</label><input type="number" step="0.01" id="crt_rmKg"></div>
+                <div class="form-group full-width"><label>REMARKS</label><input type="text" id="crt_remarks"></div>
+            </div>
+            <div class="btn-container"><button type="submit" class="action-btn">Create Master Record</button></div>
+        </form>
+    </div>
+
+    <div class="card table-card">
+        <div class="header-actions">
+            <h2>Historical Tracker</h2>
+            <button class="action-btn btn-export" id="exportBtn">Export Excel (Formatted)</button>
+        </div>
+        
+        <div class="filter-bar">
+            <div class="filter-item">
+                <label>Search WO NO:</label>
+                <input type="text" id="filterWo" placeholder="Type WO NO..." oninput="renderTable()">
+            </div>
+            <div class="filter-item">
+                <label>From Date:</label>
+                <input type="date" id="filterFromDate" onchange="renderTable()">
+            </div>
+            <div class="filter-item">
+                <label>To Date:</label>
+                <input type="date" id="filterToDate" onchange="renderTable()">
+            </div>
+            <button class="action-btn btn-clear" onclick="clearFilters()">Clear Filters</button>
+        </div>
+
+        <div class="table-container">
+            <table id="dataTable">
+                <thead>
+                    <tr>
+                        <th>LOG DATE</th>
+                        <th>WO NO</th>
+                        <th>PART NO</th>
+                        <th>TYPE</th>
+                        <th>SIZE</th>
+                        <th>PITCH</th>
+                        <th>LENGTH</th>
+                        <th>GR</th>
+                        <th>A/F</th>
+                        <th>PLAN QTY</th>
+                        <th>ACTUAL QTY</th>
+                        <th>R.M DETAILS</th>
+                        <th>CH WT</th>
+                        <th>RM KG</th>
+                        <th>REMARKS</th>
+                        <th>4M</th>
+                        <th>FORGING</th>
+                        <th>ROLLING</th>
+                        <th>SECONDARY</th>
+                        <th>HT</th>
+                        <th>POLISHING</th>
+                        <th>PLATING</th>
+                        <th>FINAL INSP.</th>
+                        <th>FG</th>
+                    </tr>
+                </thead>
+                <tbody id="tableBody"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+    const API_URL = 'http://localhost:5000/api/workorders';
+    let workOrders = []; 
+
+    function switchTab(tabId, btnElement) {
+        document.querySelectorAll('.card:not(.table-card)').forEach(el => el.classList.remove('active'));
+        document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+        document.getElementById(tabId).classList.add('active');
+        btnElement.classList.add('active');
+    }
+
+    async function loadDataFromServer() {
+        try {
+            const response = await fetch(API_URL);
+            workOrders = await response.json();
+            populateUpdateDropdown();
+            renderTable();
+        } catch (error) {
+            console.error(error);
+        }
+    }
+
+    function init() {
+        loadDataFromServer();
+        const today = new Date().toISOString().split('T')[0];
+        document.getElementById('upd_date').value = today;
+    }
+
+    // --- TAB 1: DAILY UPDATE LOGIC ---
+    const updWoSelect = document.getElementById('upd_woSelect');
+    const updDateInput = document.getElementById('upd_date');
+    
+    function populateUpdateDropdown() {
+        const prevSelect = updWoSelect.value;
+        updWoSelect.innerHTML = '<option value="">-- Select Work Order --</option>'; 
+        workOrders.forEach(order => {
+            const option = document.createElement('option');
+            option.value = order.WO_NO;
+            option.textContent = order.WO_NO + " - " + (order.PART_NO || '');
+            updWoSelect.appendChild(option);
+        });
+        updWoSelect.value = prevSelect; 
+    }
+
+    function handleSelectionChange() {
+        const selectedId = updWoSelect.value;
+        const selectedDate = updDateInput.value;
+        
+        if (!selectedId) {
+            document.getElementById('updateForm').reset();
+            updDateInput.value = selectedDate; 
+            return;
+        }
+
+        const order = workOrders.find(o => o.WO_NO === selectedId);
+        if (order) {
+            document.getElementById('upd_partNo').value = order.PART_NO || '';
+            document.getElementById('upd_type').value = order.TYPE || '';
+            document.getElementById('upd_size').value = order.SIZE || '';
+            document.getElementById('upd_planQty').value = order.PLAN_QTY || '';
+
+            const logForDate = order.history ? order.history.find(h => h.DATE === selectedDate) : null;
+            
+            if(logForDate) {
+                document.getElementById('upd_fourM').value = logForDate.FOUR_M || '';
+                document.getElementById('upd_forging').value = logForDate.FORGING || 0;
+                document.getElementById('upd_rolling').value = logForDate.ROLLING || 0;
+                document.getElementById('upd_secondary').value = logForDate.SECONDARY || 0;
+                document.getElementById('upd_ht').value = logForDate.HT || 0;
+                document.getElementById('upd_polishing').value = logForDate.POLISHING || 0;
+                document.getElementById('upd_plating').value = logForDate.PLATING || 0;
+                document.getElementById('upd_finalInsp').value = logForDate.FINAL_INSPECTION || 0;
+                document.getElementById('upd_fg').value = logForDate.FG || 0;
+            } else {
+                document.getElementById('upd_fourM').value = '';
+                document.getElementById('upd_forging').value = 0;
+                document.getElementById('upd_rolling').value = 0;
+                document.getElementById('upd_secondary').value = 0;
+                document.getElementById('upd_ht').value = 0;
+                document.getElementById('upd_polishing').value = 0;
+                document.getElementById('upd_plating').value = 0;
+                document.getElementById('upd_finalInsp').value = 0;
+                document.getElementById('upd_fg').value = 0;
+            }
+        }
+    }
+
+    updWoSelect.addEventListener('change', handleSelectionChange);
+    updDateInput.addEventListener('change', handleSelectionChange);
+
+    document.getElementById('updateForm').addEventListener('submit', async function(e) {
+        e.preventDefault(); 
+        const selectedId = updWoSelect.value;
+        if(!selectedId) return;
+
+        const updateData = {
+            DATE: document.getElementById('upd_date').value,
+            FOUR_M: document.getElementById('upd_fourM').value,
+            FORGING: Number(document.getElementById('upd_forging').value),
+            ROLLING: Number(document.getElementById('upd_rolling').value),
+            SECONDARY: Number(document.getElementById('upd_secondary').value),
+            HT: Number(document.getElementById('upd_ht').value),
+            POLISHING: Number(document.getElementById('upd_polishing').value),
+            PLATING: Number(document.getElementById('upd_plating').value),
+            FINAL_INSPECTION: Number(document.getElementById('upd_finalInsp').value),
+            FG: Number(document.getElementById('upd_fg').value)
+        };
+
+        try {
+            const res = await fetch(`${API_URL}/${encodeURIComponent(selectedId)}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(updateData)
+            });
+            if(res.ok) {
+                alert("Daily Log Saved!");
+                loadDataFromServer(); 
+            }
+        } catch(err) {
+            alert("Error saving log.");
+        }
+    });
+
+    // --- TAB 2: CREATE NEW WO LOGIC ---
+    document.getElementById('createForm').addEventListener('submit', async function(e) {
+        e.preventDefault(); 
+        const newOrder = {
+            WO_NO: document.getElementById('crt_woNo').value,
+            PART_NO: document.getElementById('crt_partNo').value,
+            TYPE: document.getElementById('crt_type').value,
+            SIZE: document.getElementById('crt_size').value,
+            PITCH: document.getElementById('crt_pitch').value,
+            LENGTH: document.getElementById('crt_length').value,
+            GR: document.getElementById('crt_gr').value,
+            AF: document.getElementById('crt_af').value,
+            PLAN_QTY: document.getElementById('crt_planQty').value,
+            ACTUAL_QTY: document.getElementById('crt_actualQty').value,
+            RM_DETAILS: document.getElementById('crt_rmDetails').value,
+            CH_WT: document.getElementById('crt_chWt').value,
+            RM_KG: document.getElementById('crt_rmKg').value,
+            REMARKS: document.getElementById('crt_remarks').value,
+            history: [] 
+        };
+
+        try {
+            const res = await fetch(API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(newOrder)
+            });
+            if(res.ok) {
+                alert("Master Work Order Created! Go to Daily Update to log production.");
+                this.reset();
+                loadDataFromServer();
+            } else {
+                alert("Error: Does this WO NO already exist?");
+            }
+        } catch(err) {
+            console.error(err);
+        }
+    });
+
+    function getFlattenedData() {
+        const flatList = [];
+        workOrders.forEach(wo => {
+            if (wo.history && wo.history.length > 0) {
+                wo.history.forEach(log => {
+                    flatList.push({
+                        DATE: log.DATE, WO_NO: wo.WO_NO, PART_NO: wo.PART_NO,
+                        TYPE: wo.TYPE, SIZE: wo.SIZE, PITCH: wo.PITCH,
+                        LENGTH: wo.LENGTH, GR: wo.GR, AF: wo.AF, PLAN_QTY: wo.PLAN_QTY,
+                        ACTUAL_QTY: wo.ACTUAL_QTY, RM_DETAILS: wo.RM_DETAILS,
+                        CH_WT: wo.CH_WT, RM_KG: wo.RM_KG, REMARKS: wo.REMARKS,
+                        FOUR_M: log.FOUR_M, FORGING: log.FORGING, ROLLING: log.ROLLING,
+                        SECONDARY: log.SECONDARY, HT: log.HT, POLISHING: log.POLISHING,
+                        PLATING: log.PLATING, FINAL_INSPECTION: log.FINAL_INSPECTION, FG: log.FG
+                    });
+                });
+            } else {
+                flatList.push({
+                    DATE: "No Logs Yet", WO_NO: wo.WO_NO, PART_NO: wo.PART_NO,
+                    TYPE: wo.TYPE, SIZE: wo.SIZE, PITCH: wo.PITCH,
+                    LENGTH: wo.LENGTH, GR: wo.GR, AF: wo.AF, PLAN_QTY: wo.PLAN_QTY,
+                    ACTUAL_QTY: wo.ACTUAL_QTY, RM_DETAILS: wo.RM_DETAILS,
+                    CH_WT: wo.CH_WT, RM_KG: wo.RM_KG, REMARKS: wo.REMARKS,
+                    FOUR_M: "", FORGING: 0, ROLLING: 0, SECONDARY: 0, HT: 0, 
+                    POLISHING: 0, PLATING: 0, FINAL_INSPECTION: 0, FG: 0
+                });
+            }
+        });
+        return flatList;
+    }
+
+    function getFilteredData() {
+        const searchWo = document.getElementById('filterWo').value.toLowerCase();
+        const fromDate = document.getElementById('filterFromDate').value;
+        const toDate = document.getElementById('filterToDate').value;
+        const flatList = getFlattenedData();
+
+        return flatList.filter(row => {
+            const matchesWo = row.WO_NO ? row.WO_NO.toLowerCase().includes(searchWo) : false;
+            
+            let matchesDate = true;
+            if (row.DATE !== "No Logs Yet") {
+                if (fromDate) matchesDate = matchesDate && (row.DATE >= fromDate);
+                if (toDate) matchesDate = matchesDate && (row.DATE <= toDate);
+            } else if (fromDate || toDate) {
+                matchesDate = false; 
+            }
+            return matchesWo && matchesDate;
+        });
+    }
+
+    function clearFilters() {
+        document.getElementById('filterWo').value = "";
+        document.getElementById('filterFromDate').value = "";
+        document.getElementById('filterToDate').value = "";
+        renderTable();
+    }
+
+    function renderTable() {
+        const tbody = document.getElementById('tableBody');
+        tbody.innerHTML = ''; 
+        const displayData = getFilteredData();
+
+        displayData.forEach(row => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td><span class="badge">${row.DATE}</span></td>
+                <td><strong>${row.WO_NO || ''}</strong></td>
+                <td>${row.PART_NO || ''}</td>
+                <td>${row.TYPE || ''}</td>
+                <td>${row.SIZE || ''}</td>
+                <td>${row.PITCH || ''}</td>
+                <td>${row.LENGTH || ''}</td>
+                <td>${row.GR || ''}</td>
+                <td>${row.AF || ''}</td>
+                <td>${row.PLAN_QTY || ''}</td>
+                <td>${row.ACTUAL_QTY || ''}</td>
+                <td>${row.RM_DETAILS || ''}</td>
+                <td>${row.CH_WT || ''}</td>
+                <td>${row.RM_KG || ''}</td>
+                <td>${row.REMARKS || ''}</td>
+                <td>${row.FOUR_M || ''}</td>
+                <td>${row.FORGING || 0}</td>
+                <td>${row.ROLLING || 0}</td>
+                <td>${row.SECONDARY || 0}</td>
+                <td>${row.HT || 0}</td>
+                <td>${row.POLISHING || 0}</td>
+                <td>${row.PLATING || 0}</td>
+                <td>${row.FINAL_INSPECTION || 0}</td>
+                <td>${row.FG || 0}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    // --- STYLED EXCEL EXPORT ---
+    document.getElementById('exportBtn').addEventListener('click', function() {
+        const exportDataList = getFilteredData();
+        if (exportDataList.length === 0) return alert("No data to export!");
+        
+        const cleanData = exportDataList.map(({_id, __v, ...rest}) => rest);
+        const worksheet = XLSX.utils.json_to_sheet(cleanData);
+        
+        const range = XLSX.utils.decode_range(worksheet['!ref']);
+        
+        const cols = [];
+        for (let C = range.s.c; C <= range.e.c; ++C) {
+            cols.push({ wch: 15 }); 
+        }
+        worksheet['!cols'] = cols;
+
+        for (let R = range.s.r; R <= range.e.r; ++R) {
+            for (let C = range.s.c; C <= range.e.c; ++C) {
+                const cellRef = XLSX.utils.encode_cell({c: C, r: R});
+                if (!worksheet[cellRef]) continue;
+
+                let cellStyle = {
+                    alignment: { vertical: "center", horizontal: "center" }
+                };
+
+                if (R === 0) {
+                    cellStyle.fill = { fgColor: { rgb: "FFFF00" } }; 
+                    cellStyle.font = { bold: true };                 
+                }
+
+                worksheet[cellRef].s = cellStyle;
+            }
+        }
+
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Production_History");
+        
+        const fileName = `Production_History_${new Date().toISOString().split('T')[0]}.xlsx`;
+        XLSX.writeFile(workbook, fileName);
+    });
+
+    init();
+</script>
+</body>
+</html>
