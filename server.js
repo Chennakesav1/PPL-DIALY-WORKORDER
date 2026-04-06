@@ -8,7 +8,7 @@ app.use(cors());
 app.use(express.json());
 
 // Pointing to a v2 database so old data doesn't cause schema errors
-mongoose.connect('mongodb+srv://chennakesavarao89_db_user:chenna12345@cluster0.jtdhwd0.mongodb.net/?appName=Cluster0')
+mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log("Connected to MongoDB (v2)"))
   .catch(err => console.error("Could not connect to MongoDB", err));
 
