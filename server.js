@@ -6,11 +6,12 @@ const cors = require('cors');
 const app = express();
 app.use(cors());
 app.use(express.json());
+require('dotenv').config();
 
 // Pointing to a v2 database so old data doesn't cause schema errors
 mongoose.connect(process.env.MONGO_URI)
-  .then(() => console.log("Connected to MongoDB (v2)"))
-  .catch(err => console.error("Could not connect to MongoDB", err));
+    .then(() => console.log("✅ MongoDB Connected Successfully"))
+    .catch(err => console.error("❌ MongoDB Connection CRASH:", err));
 
 // Schema for the DAILY progress
 const updateSchema = new mongoose.Schema({
