@@ -2,18 +2,21 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
+const path = require('path'); // <--- ADDED THIS
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 require('dotenv').config();
 
-// Pointing to a v2 database so old data doesn't cause schema errors
+// Tell the server to allow access to files in the current folder (like index.html)
+app.use(express.static(__dirname)); // <--- ADDED THIS
+
+// Pointing to a v2 database
 mongoose.connect(process.env.MONGO_URI)
     .then(() => console.log("✅ MongoDB Connected Successfully"))
     .catch(err => console.error("❌ MongoDB Connection CRASH:", err));
 
-// Schema for the DAILY progress
 const updateSchema = new mongoose.Schema({
     DATE: String,
     FOUR_M: String,
@@ -27,19 +30,25 @@ const updateSchema = new mongoose.Schema({
     FG: { type: Number, default: 0 }
 });
 
-// Master Schema that holds the static details AND the array of daily progress
 const workOrderSchema = new mongoose.Schema({
     WO_NO: { type: String, required: true, unique: true },
     PART_NO: String, TYPE: String, SIZE: String, PITCH: String,
     LENGTH: String, GR: String, AF: String, PLAN_QTY: String,
     ACTUAL_QTY: String, RM_DETAILS: String, CH_WT: Number,
     RM_KG: Number, REMARKS: String,
-    history: [updateSchema] // <--- This holds all your previous days!
+    history: [updateSchema]
 });
 
 const WorkOrder = mongoose.model('WorkOrder', workOrderSchema);
 
-// 1. GET all work orders
+// --- ROUTES ---
+
+// NEW ROUTE: Show the index.html dashboard when visiting the main Render link
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+// GET all work orders
 app.get('/api/workorders', async (req, res) => {
     try {
         const orders = await WorkOrder.find();
@@ -49,7 +58,7 @@ app.get('/api/workorders', async (req, res) => {
     }
 });
 
-// 2. POST (Create) a new Master work order
+// POST (Create) a new Master work order
 app.post('/api/workorders', async (req, res) => {
     try {
         const newOrder = new WorkOrder(req.body);
@@ -60,22 +69,18 @@ app.post('/api/workorders', async (req, res) => {
     }
 });
 
-// 3. PUT (Update or Add Daily Log)
+// PUT (Update or Add Daily Log)
 app.put('/api/workorders/:wo_no', async (req, res) => {
     try {
         const wo = await WorkOrder.findOne({ WO_NO: req.params.wo_no });
         if (!wo) return res.status(404).json({ message: "Work order not found" });
 
         const updateData = req.body;
-        
-        // Check if the user already entered data for this specific DATE
         const existingIndex = wo.history.findIndex(h => h.DATE === updateData.DATE);
         
         if (existingIndex >= 0) {
-            // If date exists, update that specific day
             wo.history[existingIndex] = updateData;
         } else {
-            // If it's a new day, push a new log into history
             wo.history.push(updateData);
         }
 
@@ -86,11 +91,5 @@ app.put('/api/workorders/:wo_no', async (req, res) => {
     }
 });
 
-
-// Health Check Route for the Home Page
-app.get('/', (req, res) => {
-    res.send("✅ Backend Server is Running Perfectly!");
-});
-// This tells the server: "Use Render's port if it exists, otherwise use 5000"
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
